@@ -1,9 +1,9 @@
-local allowNextSend = true
+local changedByDevice = false
 local lastUpdate = getMillis()
 
 function onValueChanged(key)
     if key == 'x' then
-        if (allowNextSend) then
+        if not changedByDevice then
             local now = getMillis()
             if (now - lastUpdate > 40) then
                 root:notify('trackVolume', {
@@ -11,15 +11,14 @@ function onValueChanged(key)
                     ['value'] = math.floor(self.values[key] * 127)
                 })
             end
-        else
-            allowNextSend = true
         end
+        changedByDevice = false
     end
 end
 
 function onReceiveNotify(notificationType, data)
     if notificationType == 'value' then
-        allowNextSend = false
+        changedByDevice = true
         self.values['x'] = data / 127
     end
 end
