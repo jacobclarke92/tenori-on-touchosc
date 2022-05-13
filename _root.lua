@@ -84,6 +84,11 @@ local bpm = 70
 local currentTrack = 0
 local currentBlock = 0
 
+local trackLoopPoints = {}
+for i = 1, 16 do
+    trackLoopPoints[i] = {0, 15}
+end
+
 -- copy scripts for track select buttons
 local trackSelectButtons = root:findAllByProperty('tag', 'trackSelect')
 local trackSelectScript = root:findByName('trackSelectTemplate').script
@@ -207,19 +212,20 @@ zeroOutGrid()
 
 function renderGrid()
     print('rendering grid! track', currentTrack + 1, 'block', currentBlock + 1)
+    tprint(drawState[currentTrack + 1][currentBlock + 1])
     for y = 1, 16 do
         for x = 1, 16 do
-            if y == 1 then -- TEMP
-                local on = drawState[currentTrack + 1][currentBlock + 1][y][x]
-                cellMatrix[y][x]:notify(on and 'on' or 'off')
-            end
+            local on = drawState[currentTrack + 1][currentBlock + 1][y][x]
+            cellMatrix[y][x]:notify(on == true and 'on' or 'off')
         end
     end
 end
 
 function onReceiveNotify(action, data)
     print('notified', action)
-    tprint(data)
+    if data then
+        tprint(data)
+    end
     if action == 'bpm' then
         local bit1 = data.value < 128 and 0x00 or 0x01
         local bit2 = data.value < 128 and data.value or data.value - 128
@@ -233,6 +239,18 @@ function onReceiveNotify(action, data)
 
     elseif action == 'trackPan' then
         sendTenoriSysex({LAYER_PARAM, LP_PAN, 0x00, data.value, data.track, 0x00})
+
+    elseif action == 'loopStart' then
+        local loopEnd = trackLoopPoints[currentTrack + 1][2] or 15
+        local loopStart = data.value > loopEnd and loopEnd or data.value
+        trackLoopPoints[currentTrack + 1][1] = loopStart
+        sendTenoriSysex({LAYER_PARAM, LP_LOOP, loopStart, loopEnd, currentTrack, 0x00})
+
+    elseif action == 'loopEnd' then
+        local loopStart = trackLoopPoints[currentTrack + 1][1] or 0
+        local loopEnd = data.value < loopStart and loopStart or data.value
+        trackLoopPoints[currentTrack + 1][2] = loopEnd
+        sendTenoriSysex({LAYER_PARAM, LP_LOOP, loopStart, loopEnd, currentTrack, 0x00})
 
     elseif action == 'trackSelect' then
         for i = 1, #trackSelectButtons do
@@ -254,6 +272,7 @@ function onReceiveNotify(action, data)
         for x = 1, 16 do
             local newValue = math.random(0, 1) == 1 and true or false
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, newValue == true and DRAW_ON or DRAW_OFF, 0x00})
+            drawState[currentTrack + 1][currentBlock + 1][data.y + 1][x] = newValue
             cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = newValue
             })
@@ -262,6 +281,7 @@ function onReceiveNotify(action, data)
     elseif action == 'fillRow' then
         for x = 1, 16 do
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, DRAW_ON, 0x00})
+            drawState[currentTrack + 1][currentBlock + 1][data.y + 1][x] = true
             cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = true
             })
@@ -270,8 +290,24 @@ function onReceiveNotify(action, data)
     elseif action == 'clearRow' then
         for x = 1, 16 do
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, DRAW_OFF, 0x00})
+            drawState[currentTrack + 1][currentBlock + 1][data.y + 1][x] = false
             cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = false
+            })
+        end
+
+    elseif action == 'clearGrid' then
+        sendTenoriSysex({CLEAR, currentBlock, currentTrack, CLEAR_BLOCK[1], CLEAR_BLOCK[2], 0x00})
+        resetTrackBlock(currentTrack + 1, currentBlock + 1)
+        zeroOutGrid()
+
+    elseif action == 'fullRandom' then
+        for x = 1, 16 do
+            local y = math.random(1, 16) -- maybe add some cool noise stuff here ???
+            sendTenoriSysex({LED_HOLD, x - 1, y - 1, currentTrack, DRAW_ON, 0x00})
+            drawState[currentTrack + 1][currentBlock + 1][y][x] = true
+            cellMatrix[y][x]:notify('draw', {
+                ['value'] = true
             })
         end
 
@@ -306,29 +342,30 @@ function receiveTenoriSysex(message)
 
     elseif message[1] == CURRENT_TRACK_NOTIFY then
         print('received CURRENT_TRACK_NOTIFY')
-        currentTrack = message[2]
-        self.children['trackSelect' .. (currentTrack + 1)]:notify('on')
+        trackSelectButtons[currentTrack + 1]:notify('on')
         for i = 1, #trackSelectButtons do
             if (i ~= currentTrack + 1) then
-                self.children['trackSelect' .. i]:notify('off')
+                trackSelectButtons[i]:notify('off')
             end
         end
+        currentTrack = message[2]
+        renderGrid()
 
     elseif message[1] == CLEAR then
         local block = message[2]
         local track = message[3]
         local b1 = message[4]
         local b2 = message[5]
-        if (b1 == CLEAR_LAYER[1] and b2 == CLEAR_LAYER[2]) or (b1 == CLEAR_BLOCK[1] and b2 == CLEAR_BLOCK[2]) then
-            print('received CLEAR_LAYER')
+        if (b1 == CLEAR_BLOCK[1] and b2 == CLEAR_BLOCK[2]) then
+            print('received CLEAR_BLOCK')
             print('track', track + 1, 'block', block + 1)
             resetTrackBlock(track + 1, block + 1)
             if track == currentTrack and block == currentBlock then
                 zeroOutGrid()
             end
 
-            -- elseif b1 == CLEAR_BLOCK[1] and b2 == CLEAR_BLOCK[2] then
-            --     print('received CLEAR_BLOCK')
+            -- elseif (b1 == CLEAR_LAYER[1] and b2 == CLEAR_LAYER[2]) then
+            --     print('received CLEAR_LAYER')
 
         elseif b1 == CLEAR_ALL_BLOCKS[1] and b2 == CLEAR_ALL_BLOCKS[2] then
             print('received CLEAR_ALL_BLOCKS')
@@ -458,6 +495,14 @@ function receiveTenoriSysex(message)
             print('received LOOP_SPEED')
         elseif message[2] == LP_LOOP then
             print('received LOOP')
+            local loopStart = message[3]
+            local loopEnd = message[4]
+            trackLoopPoints[track + 1][1] = loopStart
+            trackLoopPoints[track + 1][2] = loopEnd
+            if track == currentTrack then
+                self.children.loopStart.values.x = loopStart
+                self.children.loopEnd.values.x = loopEnd
+            end
         elseif message[2] == LP_OCTAVE then
             print('received OCTAVE')
         end
