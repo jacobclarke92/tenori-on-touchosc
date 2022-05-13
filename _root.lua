@@ -106,31 +106,60 @@ for i = 1, #trackPanControls do
 end
 
 -- copy scripts for matrix cells
+GRID_START_X = 1020 -- px
+GRID_START_Y = 40 -- px
+CELL_SIZE = 20 -- px
+local cellMatrix = {}
+for y = 1, 16 do
+    cellMatrix[y] = {}
+end
 local cells = root:findAllByProperty('tag', 'cell')
 local cellScript = root:findByName('cellTemplate').script
 for i = 1, #cells do
-    cells[i].script = cellScript
+    local cell = cells[i]
+    local col = math.floor((cell.frame.x - GRID_START_X) / CELL_SIZE) + 1
+    local row = math.floor((cell.frame.y - GRID_START_Y) / CELL_SIZE) + 1
+    cell.script = cellScript
+    cellMatrix[row][col] = cell
 end
 
 -- copy scripts for matrix row clear buttons
-local clearRowButtons = root:findAllByProperty('tag', 'clearRow')
+local clearRowButtons = {}
+local clearRowButtonsRef = root:findAllByProperty('tag', 'clearRow')
 local clearRowScript = root:findByName('clearRowTemplate').script
-for i = 1, #clearRowButtons do
-    clearRowButtons[i].script = clearRowScript
+for i = 1, #clearRowButtonsRef do
+    local elem = clearRowButtonsRef[i]
+    local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
+    -- print(elem.name .. ' -> ' .. index)
+    elem.name = 'clearRow' .. index
+    elem.script = clearRowScript
+    clearRowButtons[index] = elem
 end
 
 -- copy scripts for matrix row fill buttons
-local fillRowButtons = root:findAllByProperty('tag', 'fillRow')
+local fillRowButtons = {}
+local fillRowButtonsRef = root:findAllByProperty('tag', 'fillRow')
 local fillRowScript = root:findByName('fillRowTemplate').script
-for i = 1, #fillRowButtons do
-    fillRowButtons[i].script = fillRowScript
+for i = 1, #fillRowButtonsRef do
+    local elem = fillRowButtonsRef[i]
+    local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
+    -- print(elem.name .. ' -> ' .. index)
+    elem.name = 'fillRow' .. index
+    elem.script = fillRowScript
+    fillRowButtons[index] = elem
 end
 
 -- copy scripts for matrix row row randomize buttons
-local randRowButtons = root:findAllByProperty('tag', 'randRow')
+local randRowButtons = {}
+local randRowButtonsRef = root:findAllByProperty('tag', 'randRow')
 local randRowScript = root:findByName('randRowTemplate').script
-for i = 1, #randRowButtons do
-    randRowButtons[i].script = randRowScript
+for i = 1, #randRowButtonsRef do
+    local elem = randRowButtonsRef[i]
+    local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
+    -- print(elem.name .. ' -> ' .. index)
+    elem.name = 'randRow' .. index
+    elem.script = randRowScript
+    randRowButtons[index] = elem
 end
 
 -- set up grid state 
@@ -182,8 +211,7 @@ function renderGrid()
         for x = 1, 16 do
             if y == 1 then -- TEMP
                 local on = drawState[currentTrack + 1][currentBlock + 1][y][x]
-                local cell = self.children['cell_y' .. y .. 'x' .. x]
-                cell:notify(on and 'on' or 'off')
+                cellMatrix[y][x]:notify(on and 'on' or 'off')
             end
         end
     end
@@ -226,7 +254,7 @@ function onReceiveNotify(action, data)
         for x = 1, 16 do
             local newValue = math.random(0, 1) == 1 and true or false
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, newValue == true and DRAW_ON or DRAW_OFF, 0x00})
-            self.children['cell_y' .. (data.y + 1) .. 'x' .. x]:notify('draw', {
+            cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = newValue
             })
         end
@@ -234,7 +262,7 @@ function onReceiveNotify(action, data)
     elseif action == 'fillRow' then
         for x = 1, 16 do
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, DRAW_ON, 0x00})
-            self.children['cell_y' .. (data.y + 1) .. 'x' .. x]:notify('draw', {
+            cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = true
             })
         end
@@ -242,7 +270,7 @@ function onReceiveNotify(action, data)
     elseif action == 'clearRow' then
         for x = 1, 16 do
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, DRAW_OFF, 0x00})
-            self.children['cell_y' .. (data.y + 1) .. 'x' .. x]:notify('draw', {
+            cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = false
             })
         end
@@ -316,7 +344,7 @@ function receiveTenoriSysex(message)
         if message[4] == currentTrack then
             local x = message[2] + 1
             local y = message[3] + 1
-            self.children['cell_y' .. y .. 'x' .. x]:notify('on')
+            cellMatrix[y][x]:notify('on')
         end
 
     elseif message[1] == LED_OFF then
@@ -324,7 +352,7 @@ function receiveTenoriSysex(message)
         if message[4] == currentTrack then
             local x = message[2] + 1
             local y = message[3] + 1
-            self.children['cell_y' .. y .. 'x' .. x]:notify('off')
+            cellMatrix[y][x]:notify('off')
         end
 
     elseif message[1] == LED_HOLD then
@@ -336,7 +364,7 @@ function receiveTenoriSysex(message)
         local newValue = message[5] == DRAW_ON and true or false
         drawState[track + 1][currentBlock + 1][y][x] = newValue
         if track == currentTrack then
-            self.children['cell_y' .. y .. 'x' .. x]:notify('draw', {
+            cellMatrix[y][x]:notify('draw', {
                 ['value'] = newValue
             })
         end
