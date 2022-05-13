@@ -1,11 +1,10 @@
-local track = string.match(self.name, "%d+") - 1
 local switchedOnByDevice = false
 
 function onValueChanged(key)
     if key == 'x' and self.values[key] == 1 then
         if switchedOnByDevice == false then
             root:notify('trackSelect', {
-                ['track'] = track
+                ['track'] = string.match(self.name, "%d+") - 1
             })
         end
         switchedOnByDevice = false

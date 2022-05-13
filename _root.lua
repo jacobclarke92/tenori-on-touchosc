@@ -1,6 +1,25 @@
 SYSEX_START = {MIDIMessageType.SYSTEMEXCLUSIVE, 0x43, 0x73, 0x01, 0x33, 0x01, 0x00}
 
--- FADER_MIDI_DEBOUNCE_MS = 40
+REVERB_TYPES = {
+    [0x00] = 'NONE',
+    [0x01] = 'HALL1',
+    [0x02] = 'HALL2',
+    [0x03] = 'ROOM1',
+    [0x04] = 'ROOM2',
+    [0x05] = 'ROOM3',
+    [0x06] = 'STAGE1',
+    [0x07] = 'STAGE2',
+    [0x08] = 'PLATE1',
+    [0x09] = 'PLATE2'
+}
+
+CHORUS_TYPES = {
+    [0x00] = 'NONE',
+    [0x01] = 'CHORUS1',
+    [0x02] = 'CHORUS2',
+    [0x03] = 'FLANGER1',
+    [0x04] = 'FLANGER2'
+}
 
 -- BIT 1
 LED_ON = 0x02
@@ -50,7 +69,7 @@ CLEAR_LAYER = {0x00, 0x41}
 CLEAR_ALL_BLOCKS = {0x01, 0x01}
 CLEAR_EVERYTHING = {0x01, 0x07}
 
--- MISC
+-- MISC for readability
 PLAY = 0x01
 PAUSE = 0x00
 MUTE = 0x01
@@ -60,28 +79,80 @@ ALL_LAYERS = 0x11
 DRAW_ON = 0x00
 DRAW_OFF = 0x01
 
-local currentTrack = 0
-local trackSelectButtons = root:findAllByProperty('tag', 'trackSelect')
-local gridRows = root:findAllByProperty('tag', 'gridRow')
-local panPots = root.children.panPots:findAllByProperty('tag', 'pan')
-
+-- state vars
 local bpm = 70
+local currentTrack = 0
+local currentBlock = 0
+
+-- copy scripts for track select buttons
+local trackSelectButtons = root:findAllByProperty('tag', 'trackSelect')
+local trackSelectScript = root:findByName('trackSelectTemplate').script
+for i = 1, #trackSelectButtons do
+    trackSelectButtons[i].script = trackSelectScript
+end
+
+-- copy scripts for track volume controls
+local trackVolumeControls = root:findAllByProperty('tag', 'trackVolume')
+local trackVolumeScript = root:findByName('trackVolumeTemplate').script
+for i = 1, #trackVolumeControls do
+    trackVolumeControls[i].script = trackVolumeScript
+end
+
+-- copy scripts for track pan controls
+local trackPanControls = root:findAllByProperty('tag', 'trackPan')
+local trackPanScript = root:findByName('trackPanTemplate').script
+for i = 1, #trackPanControls do
+    trackPanControls[i].script = trackPanScript
+end
+
+-- copy scripts for matrix cells
+local cells = root:findAllByProperty('tag', 'cell')
+local cellScript = root:findByName('cellTemplate').script
+for i = 1, #cells do
+    cells[i].script = cellScript
+end
+
+-- copy scripts for matrix row clear buttons
+local clearRowButtons = root:findAllByProperty('tag', 'clearRow')
+local clearRowScript = root:findByName('clearRowTemplate').script
+for i = 1, #clearRowButtons do
+    clearRowButtons[i].script = clearRowScript
+end
+
+-- copy scripts for matrix row fill buttons
+local fillRowButtons = root:findAllByProperty('tag', 'fillRow')
+local fillRowScript = root:findByName('fillRowTemplate').script
+for i = 1, #fillRowButtons do
+    fillRowButtons[i].script = fillRowScript
+end
+
+-- copy scripts for matrix row row randomize buttons
+local randRowButtons = root:findAllByProperty('tag', 'randRow')
+local randRowScript = root:findByName('randRowTemplate').script
+for i = 1, #randRowButtons do
+    randRowButtons[i].script = randRowScript
+end
+
+-- set up grid state 
 local drawState = {}
 function initDrawState()
     for track = 1, 16 do
         drawState[track] = {}
-        for y = 1, 16 do
-            drawState[track][y] = {}
-            for x = 1, 16 do
-                drawState[track][y][x] = false
+        for block = 1, 16 do
+            drawState[track][block] = {}
+            for y = 1, 16 do
+                drawState[track][block][y] = {}
+                for x = 1, 16 do
+                    drawState[track][block][y][x] = false
+                end
             end
         end
     end
 end
-function resetTrackState(track)
+function resetTrackBlock(track, block)
     for y = 1, 16 do
         for x = 1, 16 do
-            drawState[track][y][x] = false
+            drawState[track][block][y][x] = false
         end
     end
 end
@@ -93,25 +164,41 @@ for i = 1, #trackSelectButtons do
 end
 
 -- reset pan panPots
-for i = 1, #panPots do
-    panPots[i]:notify('value', 64)
+for i = 1, #trackPanControls do
+    trackPanControls[i]:notify('value', 64)
 end
 
 -- reset grid
-function resetGridRows()
-    for i = 1, #gridRows do
-        gridRows[i]:notify('reset')
+function zeroOutGrid()
+    for i = 1, #cells do
+        cells[i]:notify('off')
     end
 end
-resetGridRows()
+zeroOutGrid()
+
+function renderGrid()
+    print('rendering grid! track', currentTrack + 1, 'block', currentBlock + 1)
+    for y = 1, 16 do
+        for x = 1, 16 do
+            if y == 1 then -- TEMP
+                local on = drawState[currentTrack + 1][currentBlock + 1][y][x]
+                local cell = self.children['cell_y' .. y .. 'x' .. x]
+                cell:notify(on and 'on' or 'off')
+            end
+        end
+    end
+end
 
 function onReceiveNotify(action, data)
     print('notified', action)
     tprint(data)
     if action == 'bpm' then
-        local bit1 = data.bpm < 128 and 0x00 or 0x01
-        local bit2 = data.bpm < 128 and data.bpm or data.bpm - 128
+        local bit1 = data.value < 128 and 0x00 or 0x01
+        local bit2 = data.value < 128 and data.value or data.value - 128
         sendTenoriSysex({COMMON_PARAM, CP_TEMPO, bit1, bit2, 0x00, 0x00})
+
+    elseif action == 'swing' then
+        sendTenoriSysex({COMMON_PARAM, CP_SWING, 0x00, data.value, 0x00, 0x00})
 
     elseif action == 'trackVolume' then
         sendTenoriSysex({LAYER_PARAM, LP_VOLUME, 0x00, data.value, data.track, 0x00})
@@ -125,6 +212,8 @@ function onReceiveNotify(action, data)
                 self.children['trackSelect' .. i]:notify('off')
             end
         end
+        currentTrack = data.track
+        renderGrid()
         sendTenoriSysex({CURRENT_TRACK_CHANGE, data.track, 0x00, 0x00, 0x00, 0x00})
 
     elseif action == 'ledOn' then
@@ -135,15 +224,40 @@ function onReceiveNotify(action, data)
 
     elseif action == 'fillRowRandomly' then
         for x = 1, 16 do
-            local value = drawState[currentTrack + 1][data.y + 1][x]
             local newValue = math.random(0, 1) == 1 and true or false
-            print(x, value, newValue)
             sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, newValue == true and DRAW_ON or DRAW_OFF, 0x00})
-            self.children['y' .. (data.y + 1)]:notify('draw', {
-                ['x'] = x,
+            self.children['cell_y' .. (data.y + 1) .. 'x' .. x]:notify('draw', {
                 ['value'] = newValue
             })
         end
+
+    elseif action == 'fillRow' then
+        for x = 1, 16 do
+            sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, DRAW_ON, 0x00})
+            self.children['cell_y' .. (data.y + 1) .. 'x' .. x]:notify('draw', {
+                ['value'] = true
+            })
+        end
+
+    elseif action == 'clearRow' then
+        for x = 1, 16 do
+            sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, DRAW_OFF, 0x00})
+            self.children['cell_y' .. (data.y + 1) .. 'x' .. x]:notify('draw', {
+                ['value'] = false
+            })
+        end
+
+    elseif action == 'reverbType' then
+        sendTenoriSysex({COMMON_PARAM, CP_REVERB_TYPE, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'reverbAmount' then
+        sendTenoriSysex({COMMON_PARAM, CP_REVERB_AMOUNT, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'chorusType' then
+        sendTenoriSysex({COMMON_PARAM, CP_CHORUS_TYPE, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'chorusAmount' then
+        sendTenoriSysex({COMMON_PARAM, CP_CHORUS_AMOUNT, 0x00, data.value, 0x00, 0x00})
 
     end
 end
@@ -179,9 +293,10 @@ function receiveTenoriSysex(message)
         local b2 = message[5]
         if (b1 == CLEAR_LAYER[1] and b2 == CLEAR_LAYER[2]) or (b1 == CLEAR_BLOCK[1] and b2 == CLEAR_BLOCK[2]) then
             print('received CLEAR_LAYER')
-            resetTrackState(track + 1)
-            if (track == currentTrack) then
-                resetGridRows()
+            print('track', track + 1, 'block', block + 1)
+            resetTrackBlock(track + 1, block + 1)
+            if track == currentTrack and block == currentBlock then
+                zeroOutGrid()
             end
 
             -- elseif b1 == CLEAR_BLOCK[1] and b2 == CLEAR_BLOCK[2] then
@@ -190,7 +305,7 @@ function receiveTenoriSysex(message)
         elseif b1 == CLEAR_ALL_BLOCKS[1] and b2 == CLEAR_ALL_BLOCKS[2] then
             print('received CLEAR_ALL_BLOCKS')
             initDrawState()
-            resetGridRows()
+            zeroOutGrid()
 
         elseif b1 == CLEAR_EVERYTHING[1] and b2 == CLEAR_EVERYTHING[2] then
             print('received CLEAR_EVERYTHING')
@@ -201,9 +316,7 @@ function receiveTenoriSysex(message)
         if message[4] == currentTrack then
             local x = message[2] + 1
             local y = message[3] + 1
-            self.children['y' .. y]:notify('on', {
-                ['x'] = x
-            })
+            self.children['cell_y' .. y .. 'x' .. x]:notify('on')
         end
 
     elseif message[1] == LED_OFF then
@@ -211,9 +324,7 @@ function receiveTenoriSysex(message)
         if message[4] == currentTrack then
             local x = message[2] + 1
             local y = message[3] + 1
-            self.children['y' .. y]:notify('off', {
-                ['x'] = x
-            })
+            self.children['cell_y' .. y .. 'x' .. x]:notify('off')
         end
 
     elseif message[1] == LED_HOLD then
@@ -221,16 +332,12 @@ function receiveTenoriSysex(message)
         local x = message[2] + 1
         local y = message[3] + 1
         local track = message[4]
-        print('track', track, 'x', x, 'y', y)
-        if (message[5] == DRAW_ON) then
-            drawState[track + 1][y][x] = true
-        elseif (message[5] == DRAW_OFF) then
-            drawState[track + 1][y][x] = false
-        end
+        print('track', track, 'x', x, 'y', y, message[5] == DRAW_ON and 'on' or 'off')
+        local newValue = message[5] == DRAW_ON and true or false
+        drawState[track + 1][currentBlock + 1][y][x] = newValue
         if track == currentTrack then
-            self.children['y' .. y]:notify('draw', {
-                ['x'] = x,
-                ['value'] = drawState[track + 1][y][x]
+            self.children['cell_y' .. y .. 'x' .. x]:notify('draw', {
+                ['value'] = newValue
             })
         end
 
@@ -253,7 +360,7 @@ function receiveTenoriSysex(message)
             print('bpm', bpm)
             self.children['bpmLabel'].values.text = bpm
             self.children['bpm']:notify('bpm', {
-                ['bpm'] = bpm
+                ['value'] = bpm
             })
 
         elseif message[2] == CP_SCALE then
@@ -276,29 +383,47 @@ function receiveTenoriSysex(message)
             print('received LOOP_RESTART')
         elseif message[2] == CP_SWING then
             print('received SWING')
+            self.children.swing:notify('value', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_REVERB_TYPE then
             print('received REVERB_TYPE')
+            self.children.reverbType:notify('reverbType', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_REVERB_AMOUNT then
             print('received REVERB_AMOUNT')
+            self.children.reverbAmount:notify('reverbAmount', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_CHORUS_TYPE then
             print('received CHORUS_TYPE')
+            self.children.chorusType:notify('chorusType', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_CHORUS_AMOUNT then
             print('received CHORUS_AMOUNT')
+            self.children.chorusAmount:notify('chorusAmount', {
+                ['value'] = bit2
+            })
+
         end
 
     elseif message[1] == LAYER_PARAM then
+        local track = message[5]
+        local value = message[4]
         if message[2] == LP_INSTRUMENT then
             print('received INSTRUMENT')
         elseif message[2] == LP_VOLUME then
             print('received VOLUME')
-            local track = message[5]
-            local value = message[4]
-            self.children.trackFaders.children['fader' .. (track + 1)]:notify('value', value)
+            self.children['trackVolume' .. (track + 1)]:notify('value', value)
         elseif message[2] == LP_PAN then
             print('received PAN')
-            local track = message[5]
-            local value = message[4]
-            self.children.panPots.children['pan' .. (track + 1)]:notify('value', value)
+            self.children['trackPan' .. (track + 1)]:notify('value', value)
         elseif message[2] == LP_SOUND_LENGTH then
             print('received SOUND_LENGTH')
         elseif message[2] == LP_LOOP_SPEED then

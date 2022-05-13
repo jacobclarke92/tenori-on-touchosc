@@ -10,6 +10,7 @@ function onValueChanged(key)
                     ['track'] = string.match(self.name, "%d+") - 1,
                     ['value'] = math.floor(self.values[key] * 127)
                 })
+                lastUpdate = now
             end
         end
         changedByDevice = false
