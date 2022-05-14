@@ -155,78 +155,50 @@ local currentTrack = 0
 local currentBlock = 0
 -------------------------
 
--- copy scripts for track select buttons
 local trackSelectButtons = root:findAllByProperty('tag', 'trackSelect')
--- local trackSelectScript = root:findByName('trackSelectTemplate').script
--- for i = 1, #trackSelectButtons do
---     trackSelectButtons[i].script = trackSelectScript
--- end
-
--- copy scripts for track volume controls
 local trackVolumeControls = root:findAllByProperty('tag', 'trackVolume')
--- local trackVolumeScript = root:findByName('trackVolumeTemplate').script
--- for i = 1, #trackVolumeControls do
---     trackVolumeControls[i].script = trackVolumeScript
--- end
-
--- copy scripts for track pan controls
 local trackPanControls = root:findAllByProperty('tag', 'trackPan')
--- local trackPanScript = root:findByName('trackPanTemplate').script
--- for i = 1, #trackPanControls do
---     trackPanControls[i].script = trackPanScript
--- end
 
--- copy scripts for matrix cells
+--  matrix cells
 local cellMatrix = {}
 for y = 1, 16 do
 cellMatrix[y] = {}
 end
 local cells = root:findAllByProperty('tag', 'cell')
--- local cellScript = root:findByName('cellTemplate').script
 for i = 1, #cells do
 local cell = cells[i]
 local col = math.floor((cell.frame.x - GRID_START_X) / CELL_SIZE) + 1
 local row = math.floor((cell.frame.y - GRID_START_Y) / CELL_SIZE) + 1
--- cell.script = cellScript
 cellMatrix[row][col] = cell
 end
 
--- copy scripts for matrix row clear buttons
+-- matrix row clear buttons
 local clearRowButtons = {}
 local clearRowButtonsRef = root:findAllByProperty('tag', 'clearRow')
--- local clearRowScript = root:findByName('clearRowTemplate').script
 for i = 1, #clearRowButtonsRef do
 local elem = clearRowButtonsRef[i]
 local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
--- print(elem.name .. ' -> ' .. index)
 elem.name = 'clearRow' .. index
--- elem.script = clearRowScript
 clearRowButtons[index] = elem
 end
 
--- copy scripts for matrix row fill buttons
+-- matrix row fill buttons
 local fillRowButtons = {}
 local fillRowButtonsRef = root:findAllByProperty('tag', 'fillRow')
--- local fillRowScript = root:findByName('fillRowTemplate').script
 for i = 1, #fillRowButtonsRef do
 local elem = fillRowButtonsRef[i]
 local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
--- print(elem.name .. ' -> ' .. index)
 elem.name = 'fillRow' .. index
--- elem.script = fillRowScript
 fillRowButtons[index] = elem
 end
 
--- copy scripts for matrix row row randomize buttons
+-- matrix row row randomize buttons
 local randRowButtons = {}
 local randRowButtonsRef = root:findAllByProperty('tag', 'randRow')
--- local randRowScript = root:findByName('randRowTemplate').script
 for i = 1, #randRowButtonsRef do
 local elem = randRowButtonsRef[i]
 local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
--- print(elem.name .. ' -> ' .. index)
 elem.name = 'randRow' .. index
--- elem.script = randRowScript
 randRowButtons[index] = elem
 end
 
