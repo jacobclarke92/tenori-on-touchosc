@@ -1,0 +1,3 @@
+GRID_START_X = 1020 -- px
+GRID_START_Y = 40 -- px
+CELL_SIZE = 20 -- px
