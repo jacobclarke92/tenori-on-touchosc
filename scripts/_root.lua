@@ -102,36 +102,6 @@ for i = 1, #cells do
     cellMatrix[row][col] = cell
 end
 
--- matrix row clear buttons
-local clearRowButtons = {}
-local clearRowButtonsRef = root:findAllByProperty('tag', 'clearRow')
-for i = 1, #clearRowButtonsRef do
-    local elem = clearRowButtonsRef[i]
-    local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
-    elem.name = 'clearRow' .. index
-    clearRowButtons[index] = elem
-end
-
--- matrix row fill buttons
-local fillRowButtons = {}
-local fillRowButtonsRef = root:findAllByProperty('tag', 'fillRow')
-for i = 1, #fillRowButtonsRef do
-    local elem = fillRowButtonsRef[i]
-    local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
-    elem.name = 'fillRow' .. index
-    fillRowButtons[index] = elem
-end
-
--- matrix row row randomize buttons
-local randRowButtons = {}
-local randRowButtonsRef = root:findAllByProperty('tag', 'randRow')
-for i = 1, #randRowButtonsRef do
-    local elem = randRowButtonsRef[i]
-    local index = math.floor((elem.frame.y - GRID_START_Y) / CELL_SIZE) + 1
-    elem.name = 'randRow' .. index
-    randRowButtons[index] = elem
-end
-
 -- reset track select state
 for i = 1, #trackSelectButtons do
     trackSelectButtons[i]:notify(i == 1 and 'on' or 'off')
@@ -275,6 +245,23 @@ function onReceiveNotify(action, data)
             drawState[currentTrack + 1][currentBlock + 1][data.y + 1][x] = true
             cellMatrix[data.y + 1][x]:notify('draw', {
                 ['value'] = true
+            })
+        end
+
+    elseif action == 'rowShift' then
+        local cachedRowState = table.clone(drawState[currentTrack + 1][currentBlock + 1][data.y + 1])
+        for x = 1, 16 do
+            local index = x + (data.amount * -1)
+            if index > 16 then
+                index = index - 16
+            elseif index < 1 then
+                index = index + 16
+            end
+            local newValue = cachedRowState[index] or false
+            sendTenoriSysex({LED_HOLD, x - 1, data.y, currentTrack, newValue == true and DRAW_ON or DRAW_OFF, 0x00})
+            drawState[currentTrack + 1][currentBlock + 1][data.y + 1][x] = newValue
+            cellMatrix[data.y + 1][x]:notify('draw', {
+                ['value'] = newValue
             })
         end
 
@@ -535,6 +522,10 @@ function table.concat(t1, t2)
         table.insert(newT, v)
     end
     return newT
+end
+
+function table.clone(t1)
+    return table.concat({}, t1)
 end
 
 function table.isSame(a1, a2) -- algorithm is O(n log n), due to table growth.

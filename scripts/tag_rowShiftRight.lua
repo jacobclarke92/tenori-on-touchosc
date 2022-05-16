@@ -5,8 +5,9 @@ end
 
 function onValueChanged(key)
     if key == 'touch' and self.values[key] == true then
-        root:notify(self.tag, {
-            ['y'] = string.match(self.name, "%d+") - 1
+        root:notify('rowShift', {
+            ['y'] = string.match(self.name, "%d+") - 1,
+            ['amount'] = 1
         })
     end
 end
