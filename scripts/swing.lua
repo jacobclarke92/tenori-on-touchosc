@@ -8,11 +8,13 @@ local changedByDevice = false
 
 function onValueChanged(key)
     if key == 'x' then
+        local value = math.floor(MIN + self.values[key] * (MAX - MIN))
+        self.parent.children[self.name .. 'Label'].values.text = value - MAX / 2
         if not changedByDevice then
             local now = getMillis()
             if (now - lastUpdate > 40) then
                 root:notify(self.name, {
-                    ['value'] = math.floor(MIN + self.values[key] * (MAX - MIN))
+                    ['value'] = value
                 })
                 lastUpdate = now
             end

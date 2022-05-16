@@ -5,11 +5,11 @@ local changedByDevice = false
 
 function onValueChanged(key)
     if key == 'x' then
+        local value = math.floor(MIN + self.values[key] * (MAX - MIN))
+        self.parent.children[self.name .. 'Label'].values.text = value
         if not changedByDevice then
-            local bpm = math.floor(MIN + self.values[key] * (MAX - MIN))
-            self.parent.children.bpmLabel.values.text = bpm
             root:notify(self.name, {
-                ['value'] = bpm
+                ['value'] = value
             })
         end
         changedByDevice = false

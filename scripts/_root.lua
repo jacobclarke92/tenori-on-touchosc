@@ -21,6 +21,19 @@ CHORUS_TYPES = {
     [0x04] = 'FLANGER2'
 }
 
+SCALE_TYPES = {
+    [0x00] = 'Ionian',
+    [0x01] = 'Dorian',
+    [0x02] = 'Phrygian',
+    [0x03] = 'Lydian',
+    [0x04] = 'Mixolydian',
+    [0x05] = 'Aeolian',
+    [0x06] = 'Locrian',
+    [0x07] = 'Chromatic',
+    [0x08] = 'OKINAWA',
+    [0x09] = 'User'
+}
+
 -- BIT 1
 LED_ON = 0x02
 LED_ON_DRAW = 0x03
@@ -158,10 +171,10 @@ zeroOutGrid()
 
 -- update 
 function renderLoopPoints()
-    self.children.loopStart:notify('loopStart', {
+    self.children['trackLoopStart']:notify('value', {
         ['value'] = trackLoopPoints[currentTrack + 1][1]
     })
-    self.children.loopEnd:notify('loopEnd', {
+    self.children['trackLoopEnd']:notify('value', {
         ['value'] = trackLoopPoints[currentTrack + 1][2]
     })
 end
@@ -195,23 +208,80 @@ function onReceiveNotify(action, data)
     elseif action == 'swing' then
         sendTenoriSysex({COMMON_PARAM, CP_SWING, 0x00, data.value, 0x00, 0x00})
 
+    elseif action == 'masterVolume' then
+        sendTenoriSysex({COMMON_PARAM, CP_VOLUME, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'masterScale' then
+        self.children[action .. 'Label'].values.text = SCALE_TYPES[data.value]
+        sendTenoriSysex({COMMON_PARAM, CP_SCALE, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'masterTranspose' then
+        -- TODO:
+
+    elseif action == 'masterLoopStart' then
+        sendTenoriSysex({COMMON_PARAM, CP_LOOP_START, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'masterLoopEnd' then
+        sendTenoriSysex({COMMON_PARAM, CP_LOOP_END, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'masterLoopClear' then
+        self.children['masterLoopStart']:notify('masterLoopStart', {
+            ['value'] = 0
+        })
+        self.children['masterLoopEnd']:notify('masterLoopEnd', {
+            ['value'] = 15
+        })
+        sendTenoriSysex({COMMON_PARAM, CP_LOOP_START, 0x00, 0x00, 0x00, 0x00})
+        sendTenoriSysex({COMMON_PARAM, CP_LOOP_END, 0x00, 15, 0x00, 0x00})
+
+    elseif action == 'masterLoopRestart' then
+        sendTenoriSysex({COMMON_PARAM, CP_LOOP_RESTART, 0x00, 0x00, 0x00, 0x00})
+
+    elseif action == 'masterLoopSpeed' then
+        sendTenoriSysex({COMMON_PARAM, CP_LOOP_SPEED, 0x00, data.value + 1, 0x00, 0x00})
+
+    elseif action == 'reverbType' then
+        self.children[action .. 'Label'].values.text = REVERB_TYPES[data.value]
+        sendTenoriSysex({COMMON_PARAM, CP_REVERB_TYPE, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'reverbAmount' then
+        sendTenoriSysex({COMMON_PARAM, CP_REVERB_AMOUNT, 0x00, math.floor(data.value * 127), 0x00, 0x00})
+
+    elseif action == 'chorusType' then
+        self.children[action .. 'Label'].values.text = CHORUS_TYPES[data.value]
+        sendTenoriSysex({COMMON_PARAM, CP_CHORUS_TYPE, 0x00, data.value, 0x00, 0x00})
+
+    elseif action == 'chorusAmount' then
+        sendTenoriSysex({COMMON_PARAM, CP_CHORUS_AMOUNT, 0x00, math.floor(data.value * 127), 0x00, 0x00})
+
     elseif action == 'trackVolume' then
         sendTenoriSysex({LAYER_PARAM, LP_VOLUME, 0x00, data.value, data.track, 0x00})
 
     elseif action == 'trackPan' then
         sendTenoriSysex({LAYER_PARAM, LP_PAN, 0x00, data.value, data.track, 0x00})
 
-    elseif action == 'loopStart' then
+    elseif action == 'trackLoopStart' then
         local loopEnd = trackLoopPoints[currentTrack + 1][2] or 15
         local loopStart = data.value > loopEnd and loopEnd or data.value
         trackLoopPoints[currentTrack + 1][1] = loopStart
         sendTenoriSysex({LAYER_PARAM, LP_LOOP, loopStart, loopEnd, currentTrack, 0x00})
 
-    elseif action == 'loopEnd' then
+    elseif action == 'trackLoopEnd' then
         local loopStart = trackLoopPoints[currentTrack + 1][1] or 0
         local loopEnd = data.value < loopStart and loopStart or data.value
         trackLoopPoints[currentTrack + 1][2] = loopEnd
         sendTenoriSysex({LAYER_PARAM, LP_LOOP, loopStart, loopEnd, currentTrack, 0x00})
+
+    elseif action == 'trackLoopClear' then
+        trackLoopPoints[currentTrack + 1][1] = 0
+        trackLoopPoints[currentTrack + 1][2] = 15
+        self.children['trackLoopStart']:notify('trackLoopStart', {
+            ['value'] = 0
+        })
+        self.children['trackLoopEnd']:notify('trackLoopEnd', {
+            ['value'] = 15
+        })
+        sendTenoriSysex({LAYER_PARAM, LP_LOOP, 0, 15, currentTrack, 0x00})
 
     elseif action == 'trackSelect' then
         for i = 1, #trackSelectButtons do
@@ -274,12 +344,27 @@ function onReceiveNotify(action, data)
             })
         end
 
-    elseif action == 'clearGrid' then
+    elseif action == 'gridClear' then
         sendTenoriSysex({CLEAR, currentBlock, currentTrack, CLEAR_BLOCK[1], CLEAR_BLOCK[2], 0x00})
         resetTrackBlock(currentTrack + 1, currentBlock + 1)
         zeroOutGrid()
 
-    elseif action == 'fullRandom' then
+    elseif action == 'gridShift' then
+        for y = 1, 16 do
+            local cachedRowState = table.clone(drawState[currentTrack + 1][currentBlock + 1][y])
+            for x = 1, 16 do
+                local index = x + (data.amount * -1)
+                index = index > 16 and index - 16 or index < 1 and index + 16 or index
+                local newValue = cachedRowState[index] or false
+                sendTenoriSysex({LED_HOLD, x - 1, y - 1, currentTrack, newValue == true and DRAW_ON or DRAW_OFF, 0x00})
+                drawState[currentTrack + 1][currentBlock + 1][y][x] = newValue
+                cellMatrix[y][x]:notify('draw', {
+                    ['value'] = newValue
+                })
+            end
+        end
+
+    elseif action == 'gridRandom' then
         for x = 1, 16 do
             local y = math.random(1, 16) -- maybe add some cool noise stuff here ???
             sendTenoriSysex({LED_HOLD, x - 1, y - 1, currentTrack, DRAW_ON, 0x00})
@@ -288,19 +373,6 @@ function onReceiveNotify(action, data)
                 ['value'] = true
             })
         end
-
-    elseif action == 'reverbType' then
-        sendTenoriSysex({COMMON_PARAM, CP_REVERB_TYPE, 0x00, data.value, 0x00, 0x00})
-
-    elseif action == 'reverbAmount' then
-        sendTenoriSysex({COMMON_PARAM, CP_REVERB_AMOUNT, 0x00, data.value, 0x00, 0x00})
-
-    elseif action == 'chorusType' then
-        sendTenoriSysex({COMMON_PARAM, CP_CHORUS_TYPE, 0x00, data.value, 0x00, 0x00})
-
-    elseif action == 'chorusAmount' then
-        sendTenoriSysex({COMMON_PARAM, CP_CHORUS_AMOUNT, 0x00, data.value, 0x00, 0x00})
-
     end
 end
 
@@ -397,61 +469,89 @@ function receiveTenoriSysex(message)
         local bit2 = message[4]
         if message[2] == CP_VOLUME then
             print('received VOLUME')
+            self.children['masterVolume']:notify('value', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_TEMPO then
             print('received TEMPO')
             bpm = bit1 == 0x00 and (bit2) or (128 + bit2)
-            print('bpm', bpm)
-            self.children['bpmLabel'].values.text = bpm
             self.children['bpm']:notify('bpm', {
                 ['value'] = bpm
             })
 
         elseif message[2] == CP_SCALE then
             print('received SCALE')
+            self.children['masterScaleLabel'].values.text = SCALE_TYPES[bit1 + 1]
+            self.children['masterScale']:notify('value', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_TRANSPOSE then
             print('received TRANSPOSE')
+            -- TODO:
+
         elseif message[2] == CP_MUTE then
             if message[4] == MUTE then
                 print('received MUTE')
+                -- TODO:
             elseif message[4] == UNMUTE then
                 print('received UNMUTE')
+                -- TODO:
             end
+
         elseif message[2] == CP_LOOP_SPEED then
             print('received LOOP_SPEED')
+            self.children['masterLoopSpeed']:notify('value', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_LOOP_START then
             print('received LOOP_START')
+            self.children['masterLoopStart']:notify('value', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_LOOP_END then
             print('received LOOP_END')
+            self.children['masterLoopEnd']:notify('value', {
+                ['value'] = bit2
+            })
+
         elseif message[2] == CP_LOOP_RESTART then
             print('received LOOP_RESTART')
+            -- TODO: reset playhead?
+
         elseif message[2] == CP_SWING then
             print('received SWING')
-            self.children.swing:notify('value', {
+            self.children['swing']:notify('value', {
                 ['value'] = bit2
             })
 
         elseif message[2] == CP_REVERB_TYPE then
             print('received REVERB_TYPE')
-            self.children.reverbType:notify('reverbType', {
+            self.children['reverbTypeLabel'].values.text = REVERB_TYPES[bit2 + 1]
+            self.children['reverbType']:notify('reverbType', {
                 ['value'] = bit2
             })
 
         elseif message[2] == CP_REVERB_AMOUNT then
             print('received REVERB_AMOUNT')
-            self.children.reverbAmount:notify('reverbAmount', {
-                ['value'] = bit2
+            self.children['reverbAmount']:notify('reverbAmount', {
+                ['value'] = bit2 / 127
             })
 
         elseif message[2] == CP_CHORUS_TYPE then
             print('received CHORUS_TYPE')
-            self.children.chorusType:notify('chorusType', {
+            self.children['chorusTypeLabel'].values.text = CHORUS_TYPES[bit2 + 1]
+            self.children['chorusType']:notify('chorusType', {
                 ['value'] = bit2
             })
 
         elseif message[2] == CP_CHORUS_AMOUNT then
             print('received CHORUS_AMOUNT')
-            self.children.chorusAmount:notify('chorusAmount', {
-                ['value'] = bit2
+            self.children['chorusAmount']:notify('chorusAmount', {
+                ['value'] = bit2 / 127
             })
 
         end
